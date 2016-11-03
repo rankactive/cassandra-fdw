@@ -15,9 +15,10 @@ PostgreSQL Foreign Data Wrapper for Cassandra
 ```bash
 pgxn install multicorn
 ```
-#### install Cassandra driver
+#### install Cassandra driver and modules
 ```bash
 pip install cassandra-driver
+pip install pytz
 ```
 #### clone repository
 ```bash
