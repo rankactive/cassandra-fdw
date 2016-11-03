@@ -70,16 +70,16 @@ SELECT * FROM fdw_table WHERE col1 = 'some text';
 INSERT INTO fdw_table VALUES ('text', 123, 1234);
 ```
 
-By default modify concurrency level is 4. It means that batch modifications will send to Cassandra in 4 threads. To change it use:
+ By default, the concurrency level of modifications is 4. It means that batch modifications will be sent in 4 threads to Cassandra. To change it use:
 ```SQL
 ALTER SERVER fdw_srv OPTIONS (modify_concurency 'your integer value');
 ```
-Or if it has setted before use:
+Or if it has been set before, use:
 ```SQL
 ALTER SERVER fdw_srv OPTIONS (SET modify_concurency 'your integer value');
 ```
 
-If you want to use updates and deletes you must create column named "\_\_rowid\_\_" with type "TEXT"
+If you want to use updates and deletes, you must create column named "\_\_rowid\_\_" with type "TEXT"
 
 Import foreign schema example:
 ```SQL
