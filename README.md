@@ -3,6 +3,7 @@ PostgreSQL Foreign Data Wrapper for Cassandra
 ## Requirements
 * PostgreSQL 9.3+
 * PostgreSQL development packages
+* Cassandra 2.1+, 2.2+, 3+
 
 ## Features
 * Foreign schema import
