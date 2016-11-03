@@ -1,6 +1,7 @@
 from multicorn import ForeignDataWrapper
 from cassandra_provider import CassandraProvider
 from properties import ISDEBUG
+import properties
 import schema_importer
 import time
 
@@ -9,7 +10,7 @@ class CassandraFDW(ForeignDataWrapper):
     def __init__(self, options, columns):
         super(CassandraFDW, self).__init__(options, columns)
         self.cassandra_provider = CassandraProvider(options, columns)
-        self.concurency_level = int(options.get('modify_concurency', '4'))
+        self.concurency_level = int(options.get('modify_concurency', properties.DEFAULT_CONCURENCY_LEVEL))
         self.modify_items = []
 
     @classmethod
@@ -19,6 +20,8 @@ class CassandraFDW(ForeignDataWrapper):
     def insert(self, new_values):
         if self.concurency_level > 1:
             self.modify_items.append(('insert', new_values))
+            if len(self.modify_items) >= properties.BATCH_MODIFY_THRESHOLD:
+                self.end_modify()
             return new_values
         else:
             return self.cassandra_provider.insert(new_values)
@@ -26,6 +29,8 @@ class CassandraFDW(ForeignDataWrapper):
     def delete(self, rowid):
         if self.concurency_level > 1:
             self.modify_items.append(('delete', rowid))
+            if len(self.modify_items) >= properties.BATCH_MODIFY_THRESHOLD:
+                self.end_modify()
             return { }
         else:
             return self.cassandra_provider.delete(rowid)

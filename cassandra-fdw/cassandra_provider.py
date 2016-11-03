@@ -11,8 +11,10 @@ import time
 import math
 import json
 import types_mapper
+import cassandra_types
 import logger
 import operator
+import properties
 from logger import ERROR, WARNING, INFO, DEBUG
 from properties import ISDEBUG
 from cassandra.concurrent import execute_concurrent
@@ -51,11 +53,11 @@ class CassandraProvider:
             logger.log("The hosts parameter is needed, setting to localhost.", WARNING)
         hosts = options.get("hosts", "localhost").split(",")
         if "port" not in options:
-            logger.log("The port parameter is needed, setting to 9042.", WARNING)
-        self.port = options.get("port", "9042")
+            logger.log("The port parameter is needed, setting to {0}.".format(properties.DEFAULT_CASSANDRA_PORT), WARNING)
+        self.port = options.get("port", properties.DEFAULT_CASSANDRA_PORT)
         self.limit = options.get("limit", None)
-        self.allow_filtering = options.get("allow_filtering", 'False') == 'True'
-        self.enable_trace = options.get("trace", 'False') == 'True'
+        self.allow_filtering = options.get("allow_filtering", properties.ALLOW_FILTERING_DEFAULT) == 'True'
+        self.enable_trace = options.get("trace", properties.ENABLE_TRACE_STATEMENTS_DEFAULT) == 'True'
         timeout = options.get("timeout", None)
         username = options.get("username", None)
         password = options.get("password", None)
@@ -65,11 +67,12 @@ class CassandraProvider:
             self.cluster.auth_provider = PlainTextAuthProvider(username=username, password=password)
         # Cassandra connection init
         self.cluster.executor_threads = 4
+        self.cluster.connect_timeout = int(options.get("connection_timeout", properties.DEFAULT_CONNECTION_TIMEOUT))
         self.session = self.cluster.connect()
         end_time = time.time()
         if ISDEBUG:
             logger.log("connected in {0} ms".format(int((end_time - start_time) * 1000)))
-        if (timeout):
+        if timeout is not None:
             self.session.default_timeout = timeout
 
     def prepare_insert_stmt(self):
@@ -95,7 +98,7 @@ class CassandraProvider:
 
         self.queryableColumns = {}
         self.querableColumnsIdx = {}
-        self.querableColumnsValidator = {}
+        self.columnsTypes = {}
         self.rowIdColumns = []
 
         table = self.cluster.metadata.keyspaces[self.keyspace].tables[self.columnfamily]
@@ -140,10 +143,7 @@ class CassandraProvider:
                 self.rowIdColumns.append(columnName)
             self.queryableColumns[columnName] = cost
             self.querableColumnsIdx[columnName] = componentIdx + cost
-            self.querableColumnsValidator[columnName] = col.cql_type
-        self.preparedColumnsIds = []
-        for col in self.queryableColumns:
-            self.preparedColumnsIds.append(col)
+            self.columnsTypes[columnName] = types_mapper.get_cql_type_from_validator(col.cql_type)
 
     def insert(self, new_values):
         if self.insert_stmt is None:
@@ -160,8 +160,8 @@ class CassandraProvider:
 
     def get_insert_args(self, new_values):
         sorted_args = []
-        for col in self.preparedColumnsIds:
-            sorted_args.append(types_mapper.map_object_to_type(new_values[col], self.querableColumnsValidator[col]))
+        for col in self.queryableColumns:
+            sorted_args.append(types_mapper.map_object_to_type(new_values[col], self.columnsTypes[col]))
         return sorted_args
 
     def get_delete_args(self, row_id_value):
@@ -169,7 +169,7 @@ class CassandraProvider:
         values = []
         for i in range(0, len(self.rowIdColumns)):
             columnName = self.rowIdColumns[i]
-            values.append(types_mapper.map_object_to_type(ids[i], self.querableColumnsValidator[columnName]))
+            values.append(types_mapper.map_object_to_type(ids[i], self.columnsTypes[columnName]))
         return values
 
     def get_insert_stmt(self):
@@ -185,10 +185,10 @@ class CassandraProvider:
     def execute_modify_items(self, modify_items, concurency):
         if len(modify_items) == 0:
             return {}
-        if ISDEBUG:
-            logger.log("start modify operation. count: {0}".format(len(modify_items)))
-            st = time.time()
         statements_and_params = []
+        if ISDEBUG:
+            logger.log("prepare data for cassandra")
+            st = time.time()
         for item in modify_items:
             if item[0] == 'insert':
                 statements_and_params.append((self.get_insert_stmt(), self.get_insert_args(item[1])))
@@ -196,6 +196,10 @@ class CassandraProvider:
                 statements_and_params.append((self.get_delete_stmt(), self.get_delete_args(item[1])))
             else:
                 raise ValueError('unknown modify item type')
+        if ISDEBUG:
+            logger.log("prepare data finished in {0} ms".format((time.time() - st) * 1000))
+            logger.log("start modify operation. count: {0}".format(len(modify_items)))
+            st = time.time()
         if len(statements_and_params) == 1:
             self.session.execute(statements_and_params[0][0], statements_and_params[0][1])
         else:
@@ -250,7 +254,7 @@ class CassandraProvider:
                 ids = json.loads(rowid)
                 for i in range(0, len(self.rowIdColumns)):
                     columnName = self.rowIdColumns[i]
-                    binding_values.append(types_mapper.map_object_to_type(ids[i], self.querableColumnsValidator[columnName]))
+                    binding_values.append(types_mapper.map_object_to_type(ids[i], self.columnsTypes[columnName]))
                 stmt_str.write(u" WHERE {0}".format(u" AND ".join(map(lambda str: str + u" = ?", self.rowIdColumns))))
             else:
                 sortedQuals = sorted(quals, key=lambda qual: qual.componentIdx)
@@ -273,7 +277,7 @@ class CassandraProvider:
                                 if self.queryableColumns[qual.field_name] == self.CLUSTERING_KEY_QUERY_COST:
                                     last_clustering_key_idx = qual.componentIdx
                                 formatted = u" {0} = ? ".format(qual.field_name)
-                                binding_values.append(types_mapper.map_object_to_type(qual.value, self.querableColumnsValidator[qual.field_name]))
+                                binding_values.append(types_mapper.map_object_to_type(qual.value, self.columnsTypes[qual.field_name]))
                                 if isWhere:
                                     stmt_str.write(u" AND ")
                                     stmt_str.write(formatted)
@@ -290,7 +294,7 @@ class CassandraProvider:
                                     formatted = u"{0} IN ?".format(qual.field_name)
                                     binding_value = []
                                     for el in qual.value:
-                                        binding_value.append(types_mapper.map_object_to_type(el, self.querableColumnsValidator[qual.field_name]))
+                                        binding_value.append(types_mapper.map_object_to_type(el, self.columnsTypes[qual.field_name]))
                                     binding_values.append(binding_value)
                                     if isWhere:
                                         stmt_str.write(u" AND ")
@@ -305,11 +309,11 @@ class CassandraProvider:
                                     eqRestricted = qual.field_name
                                     if isWhere:
                                         stmt_str.write(u" AND {0} {1} ?".format(qual.field_name, qual.operator))
-                                        binding_values.append(types_mapper.map_object_to_type(qual.value, self.querableColumnsValidator[qual.field_name]))
+                                        binding_values.append(types_mapper.map_object_to_type(qual.value, self.columnsTypes[qual.field_name]))
                                     else:
                                         stmt_str.write(u" WHERE {0} {1} ?".format(qual.field_name, qual.operator))
                                         isWhere = 1
-                                        binding_values.append(types_mapper.map_object_to_type(qual.value, self.querableColumnsValidator[qual.field_name]))
+                                        binding_values.append(types_mapper.map_object_to_type(qual.value, self.columnsTypes[qual.field_name]))
 
         if (self.limit):
             stmt_str.write(u" LIMIT ".format(limit))
@@ -349,9 +353,9 @@ class CassandraProvider:
             idx = 0
             for column_name in filtered_columns:
                 value = row[idx]
-                if self.querableColumnsValidator[column_name] == 'timestamp' and value is not None:
+                if self.columnsTypes[column_name].main_type == cassandra_types.cql_timestamp and value is not None:
                     line[column_name] = u"{0}+00:00".format(value)
-                elif self.querableColumnsValidator[column_name] == 'time' and value is not None:
+                elif self.columnsTypes[column_name].main_type == cassandra_types.cql_time and value is not None:
                     line[column_name] = u"{0}+00:00".format(value)
                 elif isinstance(value, tuple):
                     tuple_values = []
