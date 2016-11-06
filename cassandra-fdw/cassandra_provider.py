@@ -372,7 +372,7 @@ class CassandraProvider:
                 idx = idx + 1
             rowid_values = []
             for idcolumn in self.rowIdColumns:
-                rowid_values.append(str(line[idcolumn]))
+                rowid_values.append(unicode(line[idcolumn]))
             line[self.ROWIDCOLUMN] = json.dumps(rowid_values)
             yield line
 
