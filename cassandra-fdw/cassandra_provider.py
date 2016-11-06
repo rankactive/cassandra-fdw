@@ -58,6 +58,7 @@ class CassandraProvider:
         self.limit = options.get("limit", None)
         self.allow_filtering = options.get("allow_filtering", properties.ALLOW_FILTERING_DEFAULT) == 'True'
         self.enable_trace = options.get("trace", properties.ENABLE_TRACE_STATEMENTS_DEFAULT) == 'True'
+        self.ttl = int(options.get("ttl", properties.DEFAULT_TTL))
         timeout = options.get("timeout", None)
         username = options.get("username", None)
         password = options.get("password", None)
@@ -78,7 +79,10 @@ class CassandraProvider:
     def prepare_insert_stmt(self):
         insert_stmt_str = u"INSERT INTO {0}.{1} ({2}) VALUES ({3})".format(
             self.keyspace, self.columnfamily, u",".join(self.queryableColumns), u",".join([u"?"] * len(self.queryableColumns)))
+        if self.ttl != 0:
+            insert_stmt_str += " USING TTL {0}".format(self.ttl)
         if ISDEBUG:
+            logger.log("insert statement: {0}".format(insert_stmt_str))
             logger.log("preparing insert statement")
             st = time.time()
         self.insert_stmt = self.session.prepare(insert_stmt_str)
