@@ -65,7 +65,11 @@ def import_schema(schema, srv_options, options, restriction_type, restricts):
         pg_table.options['keyspace'] = schema
         pg_table.options['columnfamily'] = c_table.name
         for c_column_name in c_table.columns:
-            pg_table.columns.append(ColumnDefinition(c_column_name, type_name=types_mapper.get_pg_type(c_table.columns[c_column_name].cql_type)))
+            cql_type = c_table.columns[c_column_name].cql_type
+            pg_type = types_mapper.get_pg_type(cql_type)
+            if ISDEBUG:
+                logger.log("Adding column {0} with PostgreSQL type {2} (CQL type {1})".format(c_column_name, cql_type, pg_type))
+            pg_table.columns.append(ColumnDefinition(c_column_name, type_name=pg_type))
         if with_row_id:
             pg_table.columns.append(ColumnDefinition('__rowid__', type_name='text'))
         pg_tables.append(pg_table)

@@ -123,4 +123,4 @@ def get_pg_type(cassandra_type):
         return list_type + '[]'
     if cassandra_type not in dict:
         return cassandra_type
-    return dict[cassandra_type]()
+    return dict[cassandra_type]
