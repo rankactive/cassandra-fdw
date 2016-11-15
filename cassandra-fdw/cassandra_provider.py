@@ -74,7 +74,7 @@ class CassandraProvider:
         if ISDEBUG:
             logger.log("connected in {0} ms".format(int((end_time - start_time) * 1000)))
         if timeout is not None:
-            self.session.default_timeout = timeout
+            self.session.default_timeout = float(timeout)
 
     def prepare_insert_stmt(self):
         insert_stmt_str = u"INSERT INTO {0}.{1} ({2}) VALUES ({3})".format(
