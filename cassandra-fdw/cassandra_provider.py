@@ -320,6 +320,13 @@ class CassandraProvider:
                                     else:
                                         stmt_str.write(u" WHERE ")
                                         stmt_str.write(formatted)
+                    elif (qual.operator == "~" or qual.operator == "~~") and qual.field_name in self.indexes and self.indexes[qual.field_name] == "org.apache.cassandra.index.sasi.SASIIndex":
+                        if qual.operator == "~":
+                            val = "%{0}%".format(qual.value)
+                        else:
+                            val = qual.value
+                        stmt_str.write(u" AND {0} LIKE ?".format(qual.field_name))
+                        binding_values.append(types_mapper.map_object_to_type(val, self.columnsTypes[qual.field_name]))
                     else:
                         if (qual.operator == ">" or qual.operator == "<" or qual.operator == ">=" or qual.operator == "<="):
                             if (qual.field_name in self.queryableColumns 
