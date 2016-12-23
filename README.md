@@ -11,14 +11,19 @@ PostgreSQL Foreign Data Wrapper for Cassandra
 * CQL query optimizations
 
 ## How to install
+#### install additional packages
+```bash
+sudo apt-get install git build-essential python-dev python-setuptools pgxnclient
+```
 #### install Multicorn
 ```bash
-pgxn install multicorn
+sudo pgxn install multicorn
 ```
 #### install Cassandra driver and modules
 ```bash
-pip install cassandra-driver
-pip install pytz
+sudo easy_install pip
+sudo pip install cassandra-driver
+sudo pip install pytz
 ```
 #### clone repository
 ```bash
