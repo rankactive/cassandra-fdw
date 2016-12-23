@@ -103,12 +103,17 @@ class CassandraProvider:
         self.queryableColumns = {}
         self.querableColumnsIdx = {}
         self.columnsTypes = {}
+        self.indexes = {}
         self.rowIdColumns = []
 
         table = self.cluster.metadata.keyspaces[self.keyspace].tables[self.columnfamily]
         pkeys = [pk.name for pk in table.partition_key]
         ckeys = [ck.name for ck in table.clustering_key]
-        idxs = [i.options["target"] for i in table.indexes if "target" in i.options]
+        for idx in table.indexes:
+            idx_options = table.indexes[idx].index_options
+            if "target" in idx_options:
+                self.indexes[idx_options["target"]] = idx_options["class_name"]
+
         columns = table.columns
         componentIdx = 0
         met_pk = False
@@ -141,8 +146,8 @@ class CassandraProvider:
                     componentIdx = 0
                 else:
                     componentIdx += 1
-            if columnName in idxs:
-                cost = IDX_QUERY_COST
+            if columnName in self.indexes:
+                cost = self.IDX_QUERY_COST
             if is_primary_key:
                 self.rowIdColumns.append(columnName)
             self.queryableColumns[columnName] = cost
@@ -289,6 +294,15 @@ class CassandraProvider:
                                     stmt_str.write(u" WHERE ")
                                     stmt_str.write(formatted)
                                     isWhere = 1
+                        elif allow_filtering:
+                            formatted = u" {0} = ? ".format(qual.field_name)
+                            if isWhere:
+                                stmt_str.write(u" AND ")
+                                stmt_str.write(formatted)
+                            else:
+                                stmt_str.write(u" WHERE ")
+                                stmt_str.write(formatted)
+                                isWhere = 1
                     # IN operator
                     elif qual.operator == (u"=", True):
                         if (qual.field_name in self.queryableColumns):
@@ -308,16 +322,18 @@ class CassandraProvider:
                                         stmt_str.write(formatted)
                     else:
                         if (qual.operator == ">" or qual.operator == "<" or qual.operator == ">=" or qual.operator == "<="):
-                            if (qual.field_name in self.queryableColumns and self.queryableColumns[qual.field_name] == self.CLUSTERING_KEY_QUERY_COST):
-                                if (not eqRestricted or eqRestricted == qual.field_name):
-                                    eqRestricted = qual.field_name
-                                    if isWhere:
-                                        stmt_str.write(u" AND {0} {1} ?".format(qual.field_name, qual.operator))
-                                        binding_values.append(types_mapper.map_object_to_type(qual.value, self.columnsTypes[qual.field_name]))
-                                    else:
-                                        stmt_str.write(u" WHERE {0} {1} ?".format(qual.field_name, qual.operator))
-                                        isWhere = 1
-                                        binding_values.append(types_mapper.map_object_to_type(qual.value, self.columnsTypes[qual.field_name]))
+                            if (qual.field_name in self.queryableColumns 
+                            and (self.queryableColumns[qual.field_name] == self.CLUSTERING_KEY_QUERY_COST
+                            # only SASI indexes support <,>,>=,<=
+                            or (qual.field_name in self.indexes and self.indexes[qual.field_name] == "org.apache.cassandra.index.sasi.SASIIndex"))
+                            or allow_filtering):
+                                if isWhere:
+                                    stmt_str.write(u" AND {0} {1} ?".format(qual.field_name, qual.operator))
+                                    binding_values.append(types_mapper.map_object_to_type(qual.value, self.columnsTypes[qual.field_name]))
+                                else:
+                                    stmt_str.write(u" WHERE {0} {1} ?".format(qual.field_name, qual.operator))
+                                    isWhere = 1
+                                    binding_values.append(types_mapper.map_object_to_type(qual.value, self.columnsTypes[qual.field_name]))
 
         if (self.limit):
             stmt_str.write(u" LIMIT ".format(limit))
