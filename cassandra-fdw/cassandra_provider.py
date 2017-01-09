@@ -250,6 +250,7 @@ class CassandraProvider:
             stmt_str.write(u"SELECT {0} FROM {1}.{2}".format(",".join(map(lambda c: '"{0}"'.format(c), filteredColumns)), self.keyspace, self.columnfamily))
             isWhere = None
             eqRestricted = None
+            rangeUsed = False
 
             for qual in quals:
                 if qual.field_name == self.ROWIDCOLUMN:
@@ -307,7 +308,7 @@ class CassandraProvider:
                     elif qual.operator == (u"=", True):
                         if (qual.field_name in self.queryableColumns):
                             if (self.queryableColumns[qual.field_name] == self.CLUSTERING_KEY_QUERY_COST or self.queryableColumns[qual.field_name] == self.PARTITION_KEY_QUERY_COST):
-                                if (qual.field_name not in usedQuals and not eqRestricted):
+                                if (qual.field_name not in usedQuals and not eqRestricted and not rangeUsed):
                                     usedQuals[qual.field_name] = qual.value
                                     formatted = u"{0} IN ?".format(qual.field_name)
                                     binding_value = []
@@ -334,6 +335,7 @@ class CassandraProvider:
                             # only SASI indexes support <,>,>=,<=
                             or (qual.field_name in self.indexes and self.indexes[qual.field_name] == "org.apache.cassandra.index.sasi.SASIIndex"))
                             or allow_filtering):
+                                rangeUsed = True
                                 if isWhere:
                                     stmt_str.write(u" AND {0} {1} ?".format(qual.field_name, qual.operator))
                                     binding_values.append(types_mapper.map_object_to_type(qual.value, self.columnsTypes[qual.field_name]))
