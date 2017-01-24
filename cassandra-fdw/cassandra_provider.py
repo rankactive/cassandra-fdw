@@ -410,6 +410,24 @@ class CassandraProvider:
             logger.log(u"rowid requested")
         return self.ROWIDCOLUMN
 
+    def get_rel_size(self, quals, columns):
+        rccol = 0
+        used_quals = []
+        for q in quals:
+            if q.field_name in used_quals:
+                continue
+            used_quals.append(q.field_name)
+            if q.field_name == self.ROWIDCOLUMN:
+                return (1, 100)
+            if q.field_name in self.rowIdColumns:
+                rccol += 1
+        if rccol == len(self.rowIdColumns):
+            return (1, 100)
+        elif rccol == 0:
+            return (100000, 100)
+        else:
+            return (10000, 100)
+
     def get_path_keys(self):
         output = []
         sorted_items = sorted(self.querableColumnsIdx.items(), key=operator.itemgetter(1))
