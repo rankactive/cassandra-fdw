@@ -106,14 +106,20 @@ class CassandraProvider:
         self.columnsTypes = {}
         self.indexes = {}
         self.rowIdColumns = []
-
-        table = self.cluster.metadata.keyspaces[self.keyspace].tables[self.columnfamily]
+        is_mv = False
+        keyspace = self.cluster.metadata.keyspaces[self.keyspace]
+        if self.columnfamily not in keyspace.tables:
+            is_mv = True
+            table = keyspace.views[self.columnfamily]
+        else:
+            table = keyspace.tables[self.columnfamily]
         pkeys = [pk.name for pk in table.partition_key]
         ckeys = [ck.name for ck in table.clustering_key]
-        for idx in table.indexes:
-            idx_options = table.indexes[idx].index_options
-            if "target" in idx_options:
-                self.indexes[idx_options["target"]] = idx_options["class_name"]
+        if not is_mv:
+            for idx in table.indexes:
+                idx_options = table.indexes[idx].index_options
+                if "target" in idx_options:
+                    self.indexes[idx_options["target"]] = idx_options["class_name"]
 
         columns = table.columns
         componentIdx = 0

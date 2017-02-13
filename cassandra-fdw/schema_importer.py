@@ -39,19 +39,29 @@ def import_schema(schema, srv_options, options, restriction_type, restricts):
     keyspace = cluster.metadata.keyspaces[schema]
     cassandra_tables = []
     tables = keyspace.tables
+    views = keyspace.views
     if restriction_type is None:
         for t in tables:
-            cassandra_tables.append(tables[t])
+            if t in tables:
+                cassandra_tables.append(tables[t])
+            else:
+                cassandra_tables.append(views[t])
     elif restriction_type == 'limit':
         for r in restricts:
             t_name = r 
             if t_name in mapping_dict_backward:
                 t_name = mapping_dict_backward[t_name]
-            cassandra_tables.append(tables[t_name])
+            if t_name in tables:
+                cassandra_tables.append(tables[t_name])
+            else:
+                cassandra_tables.append(views[t_name])
     elif restriction_type == 'except':
         for t in tables:
             if t not in restricts:
-                cassandra_tables.append(tables[t])
+                if t in tables:
+                    cassandra_tables.append(tables[t])
+                else:
+                    cassandra_tables.append(views[t])
     pg_tables = []
     for c_table in cassandra_tables:
         if ISDEBUG:
