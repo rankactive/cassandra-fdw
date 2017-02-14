@@ -510,3 +510,7 @@ class CassandraProvider:
         if ISDEBUG:
             logger.log('path keys: {0}'.format(output))
         return output
+
+    def close(self):
+        self.session.shutdown()
+        self.cluster.shutdown()

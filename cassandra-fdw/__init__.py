@@ -9,9 +9,16 @@ class CassandraFDW(ForeignDataWrapper):
 
     def __init__(self, options, columns):
         super(CassandraFDW, self).__init__(options, columns)
-        self.cassandra_provider = CassandraProvider(options, columns)
+        self.init_options = options
+        self.init_columns = columns
+        self.cassandra_provider = None
         self.concurency_level = int(options.get('modify_concurency', properties.DEFAULT_CONCURENCY_LEVEL))
+        self.per_transaction_connection = options.get('per_transaction_connection', properties.PER_TRANSACTION_CONNECTION) == 'True'
         self.modify_items = []
+
+    def build_cassandra_provider(self):
+        if self.cassandra_provider == None:
+            self.cassandra_provider = CassandraProvider(self.init_options, self.init_columns)
 
     @classmethod
     def import_schema(self, schema, srv_options, options, restriction_type, restricts):
@@ -49,13 +56,21 @@ class CassandraFDW(ForeignDataWrapper):
         return []
 
     def begin(self, serializable):
+        self.build_cassandra_provider()
         if ISDEBUG:
             logger.log("begin: {0}".format(serializable))
 
     def commit(self):
         if ISDEBUG:
             logger.log("commit")
+        if self.per_transaction_connection:
+            self.close_cass_connection()
         pass
+
+    def close_cass_connection(self):
+        if self.cassandra_provider != None:
+            self.cassandra_provider.close()
+            self.cassandra_provider = None
 
     def end_modify(self):
         try:
