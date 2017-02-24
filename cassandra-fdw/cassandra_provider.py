@@ -119,7 +119,10 @@ class CassandraProvider:
             for idx in table.indexes:
                 idx_options = table.indexes[idx].index_options
                 if "target" in idx_options:
-                    self.indexes[idx_options["target"]] = idx_options["class_name"]
+                    if "class_name" in idx_options:
+                        self.indexes[idx_options["target"]] = idx_options["class_name"]
+                    else:
+                        self.indexes[idx_options["target"]] = ""
 
         columns = table.columns
         componentIdx = 0
