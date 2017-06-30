@@ -376,7 +376,7 @@ class CassandraProvider:
                                     binding_values.append(types_mapper.map_object_to_type(qual.value, self.columnsTypes[qual.field_name]))
 
         if (self.limit):
-            stmt_str.write(u" LIMIT ".format(limit))
+            stmt_str.write(u" LIMIT {0}".format(self.limit))
         if allow_filtering:
             stmt_str.write(u" ALLOW FILTERING ")
         statement = stmt_str.getvalue()
