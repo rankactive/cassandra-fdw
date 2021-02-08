@@ -107,7 +107,7 @@ class CassandraProvider:
         self.indexes = {}
         self.rowIdColumns = []
         is_mv = False
-        keyspace = self.cluster.metadata.keyspaces[self.keyspace]
+        keyspace = self.cluster.metadata.keyspaces[self.keyspace.strip('"')]
         if self.columnfamily not in keyspace.tables:
             is_mv = True
             table = keyspace.views[self.columnfamily]
